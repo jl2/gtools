@@ -101,7 +101,7 @@
 (defun qrotate (quaternion angle xyz)
   "Rotate quaternion by angle radians around the vec3 xyz."
   (declare  (optimize (speed 3) (safety 0) (debug 0) (space 0))
-            (type single-float angle)
+            (type number angle)
             (type vec3 xyz))
   (let ((half (* 0.5 angle))
         (sin-half (sin (* 0.5 angle))))
@@ -125,13 +125,13 @@
           (* scale (- (vz quat)))
           (* scale (vw quat)))))
 
-(defun vec3-quaternion-rotate (vec quat)
+(defun vec3-quaternion-rotate (quat vec)
   "Rotate the vec3 vec by the quaternion quat."
   (declare (optimize (speed 3) (safety 0) (debug 0) (space 0))
            (type vec4 quat)
            (type vec3 vec))
-  (let ((inv-q (qinv quat))
-        (vq (vxyz_ vec)))
-    (vxyz (q*
-           (q* vq quat)
-           inv-q))))
+  (vxyz (q*
+         (q* (vxyz_ vec)
+             quat)
+         (qinv quat))))
+
