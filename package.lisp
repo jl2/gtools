@@ -39,13 +39,14 @@
 
            #:read-mp3-file
            #:mp3-file
-           #:mp3-file-left-channel
-           #:mp3-file-right-channel
-           #:mp3-file-element-type
-           #:mp3-file-sample-rate
-           #:mp3-file-samples
-           #:mp3-file-channels
-           #:mp3-file-mpg123-type
-           #:mp3-file-duration-in-seconds
-
+           #:mp3-left-channel
+           #:mp3-right-channel
+           #:mp3-element-type
+           #:mp3-sample-rate
+           #:mp3-samples
+           #:mp3-channels
+           #:mp3-mpg123-type
+           #:mp3-duration-in-seconds
+           #:mp3-sample-index-for-time
+           #:mp3-channel-index-for-time
            ))

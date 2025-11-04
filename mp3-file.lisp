@@ -14,7 +14,7 @@
 
 (in-package :gtools)
 
-(defstruct mp3-file
+(defstruct (mp3-file (:conc-name mp3-))
   "A structure containing the PCM data decoded from an MP3 file as well as metadata about the MP3 file.
 The left and right channel data is in a format usable by cl-fftw."
   (left-channel)
@@ -25,12 +25,39 @@ The left and right channel data is in a format usable by cl-fftw."
   (channels 2 :type (unsigned-byte 32))
   (mpg123-type 208 :type (unsigned-byte 32)))
 
-(defun mp3-file-duration-in-seconds (mp3)
+(defun mp3-duration-in-seconds (mp3)
   "Compute the duration of an mp3-file in seconds."
   (with-slots (samples channels sample-rate) mp3
     (/ (length samples)
        (* channels sample-rate))))
 
+(defun mp3-sample-index-for-time (mp3 time-in-seconds)
+  "Calculate an index into samples for the specified time in the playback."
+  (declare (optimize (speed 3))
+           (type mp3-file mp3)
+           (type number time-in-seconds))
+  (with-slots (samples channels sample-rate) mp3
+    (* channels (floor (* time-in-seconds sample-rate)))))
+
+(defun mp3-channel-index-for-time (mp3 time-in-seconds)
+  "Calculate an index into left-channel or right-channel arrays
+for the specified time in the playback."
+  (declare (optimize (speed 3))
+           (type mp3-file mp3)
+           (type number time-in-seconds))
+  (with-slots (samples channels sample-rate) mp3
+    (* (floor (* time-in-seconds sample-rate)))))
+
+
+;; Passing in element type causes some optimization notes.
+;; I *think* it's better to get those warnings here and return
+;; arrays with a specific type for downstream processing than it
+;; would be to return a preset type and convert later.
+;; TODO: This could be more flexible, but I don't know what the API should
+;;       look like yet.
+;;       For example, I might want to read left/right channels into real/imag
+;;       components of a complex, or into a vec2, etc.
+;;       Maybe having the channels broken out into their own arrays is doing too much?
 (defun read-mp3-file (fname
                       &key
                         (scale-factor (/ 1 32768.0))
