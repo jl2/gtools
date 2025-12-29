@@ -29,7 +29,8 @@ The left and right channel data is in a format usable by cl-fftw."
   "Compute the duration of an mp3-file in seconds."
   (with-slots (samples channels sample-rate) mp3
     (/ (length samples)
-       (* channels sample-rate))))
+       (* channels sample-rate)
+       1.0)))
 
 (defun mp3-sample-index-for-time (mp3 time-in-seconds)
   "Calculate an index into samples for the specified time in the playback."

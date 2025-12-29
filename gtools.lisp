@@ -21,16 +21,24 @@
 :with t opens with xdg-open, start, or open
 :with nil doesn't open.
 "
-  (cond ((eq :emacs with)
-         #+swank (swank:eval-in-emacs `(find-file-other-window ,(namestring filename)))
-         #+swank (swank:eval-in-emacs `(previous-window-any-frame))
-         #-swank (error "Can't open in Emacs without Swank."))
+  (cond
+    ((eq :emacs with)
+     #+swank (swank:eval-in-emacs
+              `(cond
+                 ((get-buffer ,(namestring filename))
+                  (revert-buffer (get-buffer ,(namestring filename))))
+                 (t (find-file-other-window ,(namestring filename)))))
+     #+swank (swank:eval-in-emacs
+      `(previous-window-any-frame))
+     #-swank (error "Can't open in Emacs without Swank."))
+    ((eq :xnview with)
+     (uiop:launch-program (format nil "xnview ~s &" (namestring filename))))
 
-        ((stringp with)
-         (uiop:launch-program (format nil "~a ~s &" with (namestring filename))))
+    ((stringp with)
+     (uiop:launch-program (format nil "~a ~s &" with (namestring filename))))
 
-        ((eq t with)
-         (uiop:launch-program (format nil "xdg-open ~s &" (namestring filename))))))
+    ((eq t with)
+     (uiop:launch-program (format nil "xdg-open ~s &" (namestring filename))))))
 
 (defun normalize-and-create-directories (path)
   "Utility function to make relative path names relative to the user's home directory to work with Cairo."
@@ -39,61 +47,88 @@
     rn))
 
 
-(defun make-movie (directory
+(defun make-movie (image-file-directory
                    &key
-                     (bit-rate (* 48 1024 1024))
-                     (output-file-name (merge-pathnames directory
-                                                        (make-pathname :name "movie"
-                                                                       :type "mp4")))
-                     (mp3-name nil)
 
-                     (temp-name (merge-pathnames directory
-                                                 (make-pathname :name "soundless"
-                                                                :type "mp4")))
-                     (file-template "frame%08d")
-                     (image-type "png")
-                     (remove-temp t))
-  "Run ffmpeg to create a movie with audio."
-  (when (probe-file temp-name)
-    (delete-file temp-name))
+                     (image-file-base "frame")
+                     (image-file-digits 8)
+                     (image-file-type "png")
+
+                     (image-file-template (make-pathname
+                                           :name (format nil
+                                                         "~a%0~ad"
+                                                         image-file-base
+                                                         image-file-digits)
+                                           :type image-file-type
+                                           :defaults image-file-directory))
+
+                     (output-file-name (make-pathname :name "movie"
+                                                      :type "mp4"
+                                                      :defaults image-file-directory))
+
+                     (mp3-file-name nil)
+                     (image-fps 12)
+                     (final-fps 30)
+                     (bit-rate (* 48 1024 1024))
+
+                     (temp-file-name (make-pathname :name "soundless-temp-movie"
+                                               :type "mp4"
+                                               :defaults image-file-directory))
+                     (delete-images t)
+                     (delete-temp-file t))
+  "Run ffmpeg to create a silent movie, then run it again to add an MP3 soundtrack.
+The :image-file* parameters are used to build a template string for ffmpeg.
+
+When :delete-images is t, files matching <directory>/<image-file-base>*.<image-file-type> are removed after creating the soundless MP4."
+  (when (probe-file temp-file-name)
+    (delete-file temp-file-name))
 
     ;; Why is this in two steps?
   (let ((movie-command
           (format nil
-                  "ffmpeg -r 30 -i \"~a~a.~a\" -b ~a -q 4 \"~a~a\""
-                  (namestring directory)
-                  file-template
-                  image-type
+                  "ffmpeg -r ~d -i \"~a\" -b ~a -q 4 -r ~d \"~a\""
+                  image-fps
+                  (uiop:native-namestring image-file-template)
                   bit-rate
-                  (namestring directory)
-                  (namestring temp-name)))
+                  final-fps
+                  (uiop:native-namestring temp-file-name)))
 
         (audio-command
           ;; If mp3-name has a value then the audio-command adds audio and writes the video to output-file-name
-          (if mp3-name
+          (if mp3-file-name
               (format nil
-                      "ffmpeg -i \"~a~a\" -i \"~a\" -codec copy -shortest \"~a~a\""
-                      (namestring directory)
-                      (namestring temp-name)
-                      (namestring mp3-name)
-                      (namestring directory)
-                      (namestring output-file-name))
+                      "ffmpeg -r ~d -i \"~a\" -i \"~a\" -codec copy -shortest -r ~d \"~a\""
+                      final-fps
+                      (uiop:native-namestring temp-file-name)
+                      (uiop:native-namestring mp3-file-name)
+                      final-fps
+                      (uiop:native-namestring output-file-name))
               ;; otherwise it just moves the tmp video to output-file-name
-              (format nil "mv \"~a~a\" \"~a~a\""
-                      (namestring directory)
-                      (namestring temp-name)
-                      (namestring directory)
-                      (namestring output-file-name)))))
+              (format nil "mv \"~a\" \"~a\""
+                      (uiop:native-namestring temp-file-name)
+                      (uiop:native-namestring output-file-name)))))
     (format t "Running: ~a~%" movie-command)
-    (uiop:run-program movie-command)
+    (uiop:run-program movie-command :output *standard-output* :error *standard-output*)
 
     (when (probe-file output-file-name)
       (delete-file output-file-name))
 
     (format t "Running: ~a~%" audio-command)
-    (uiop:run-program audio-command)
+    (uiop:run-program audio-command :output *standard-output* :error *standard-output*)
 
     ;; Only remove the temp if the final output file was created
-    (when (and remove-temp
+    (when (and delete-temp-file
                (probe-file output-file-name))
-      (delete-file temp-name))))
+      (delete-file temp-file-name))
+    (when delete-images
+      (let* ((all-file-path (make-pathname
+                             :name (format nil
+                                           "~a*"
+                                           image-file-base)
+                             :type image-file-type))
+             (rm-cmd (format nil "find ~a -name ~s -exec rm {} \";\""
+                             (uiop:native-namestring image-file-directory)
+                             (uiop:native-namestring all-file-path)
+                             )))
+        (format t "Running: ~a~%" rm-cmd)
+        (uiop:run-program rm-cmd :output *standard-output* :error *standard-output*)))))
