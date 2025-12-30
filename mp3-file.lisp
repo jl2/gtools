@@ -34,16 +34,16 @@ The left and right channel data is in a format usable by cl-fftw."
 
 (defun mp3-sample-index-for-time (mp3 time-in-seconds)
   "Calculate an index into samples for the specified time in the playback."
-  (declare (optimize (speed 3))
+  (declare (optimize (speed 1))
            (type mp3-file mp3)
            (type number time-in-seconds))
   (with-slots (samples channels sample-rate) mp3
-    (* channels (floor (* time-in-seconds sample-rate)))))
+    (* channels (the fixnum (floor (* time-in-seconds sample-rate))))))
 
 (defun mp3-channel-index-for-time (mp3 time-in-seconds)
   "Calculate an index into left-channel or right-channel arrays
 for the specified time in the playback."
-  (declare (optimize (speed 3))
+  (declare (optimize (speed 1))
            (type mp3-file mp3)
            (type number time-in-seconds))
   (with-slots (samples channels sample-rate) mp3
@@ -62,43 +62,50 @@ for the specified time in the playback."
 (defun read-mp3-file (fname
                       &key
                         (scale-factor (/ 1 32768.0))
-                        (element-type 'double-float))
+                        (element-type 'double-float)
+                        (encodings '(:utf-8 :iso-8859-1)))
   "Read the specified mp3 file into an mp3-file structure."
 
-  (declare (optimize (speed 2) (safety 2) (debug 2)))
   ;; channels will be interleaved  left, right, left, right, ...
-  (multiple-value-bind (samples sample-rate channels mt)
-      (mpg123:decode-mp3-file (uiop:native-namestring fname)
-                              :character-encoding :utf-8)
+  ;; Pull channel data out into independent left and right channels
+  (loop
+    :for success = nil
+    :for enc :in encodings
+    :until success
+    :do
+       (format t "Reading encoding ~a~%" enc)
+       (handler-case (mpg123:decode-mp3-file (uiop:native-namestring fname)
+                                             :character-encoding enc)
+         (error (condition)
+           (format t "Caught ~a~%" condition)
+           (setf success nil))
+         (:no-error (samples sample-rate channels mt)
+           (declare (type fixnum channels sample-rate)
+                    (type real scale-factor)
+                    (type (simple-array (signed-byte 16) *) samples ))
 
-    (declare (type fixnum channels sample-rate)
-             (type (simple-array (signed-byte 16) *) samples ))
-
-    ;; Pull channel data out into independent left and right channels
-    (loop
-      :with samples-per-channel = (the fixnum (/ (length samples)
-                                                 channels))
-      :with left-channel = (make-array samples-per-channel
-                                       :element-type element-type
-                                       :initial-element (coerce 0.0 element-type))
-      :with right-channel = (make-array samples-per-channel
-                                        :element-type element-type
-                                        :initial-element (coerce 0.0 element-type))
-      :for i :below samples-per-channel
-      :for left-raw :of-type number = (* scale-factor
-                                         (aref samples (* 2 i)))
-      :for right-raw :of-type number = (* scale-factor
-                                          (aref samples (+ 1 (* 2 i))))
-      :do
-         (setf (aref left-channel i)
-               (coerce left-raw element-type))
-         (setf (aref right-channel i)
-               (coerce right-raw element-type))
-      :finally
-         (return (make-mp3-file :samples samples
-                                :element-type element-type
-                                :left-channel left-channel
-                                :right-channel right-channel
-                                :sample-rate sample-rate
-                                :channels channels
-                                :mpg123-type mt)))))
+           (loop
+             :with samples-per-channel = (the fixnum (/ (length samples)
+                                                        channels))
+             :with left-channel = (make-array samples-per-channel
+                                              :element-type element-type
+                                              :initial-element (coerce 0.0 element-type))
+             :with right-channel = (make-array samples-per-channel
+                                               :element-type element-type
+                                               :initial-element (coerce 0.0 element-type))
+             :for i :below samples-per-channel
+             :for left-raw :of-type number = (* scale-factor
+                                                (aref samples (* 2 i)))
+             :for right-raw :of-type number = (* scale-factor
+                                                 (aref samples (+ 1 (* 2 i))))
+             :do
+                (setf (aref left-channel  i) (coerce left-raw element-type)
+                      (aref right-channel i) (coerce right-raw element-type))
+             :finally
+                (return-from read-mp3-file (make-mp3-file :samples samples
+                                                          :element-type element-type
+                                                          :left-channel left-channel
+                                                          :right-channel right-channel
+                                                          :sample-rate sample-rate
+                                                          :channels channels
+                                                          :mpg123-type mt)))))))
