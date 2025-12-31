@@ -75,7 +75,8 @@
                                                :type "mp4"
                                                :defaults image-file-directory))
                      (delete-images t)
-                     (delete-temp-file t))
+                     (delete-temp-file t)
+                     (open-with "mpv"))
   "Run ffmpeg to create a silent movie, then run it again to add an MP3 soundtrack.
 The :image-file* parameters are used to build a template string for ffmpeg.
 
@@ -115,6 +116,8 @@ When :delete-images is t, files matching <directory>/<image-file-base>*.<image-f
 
     (format t "Running: ~a~%" audio-command)
     (uiop:run-program audio-command :output *standard-output* :error *standard-output*)
+
+    (gt:maybe-open output-file-name :with open-with)
 
     ;; Only remove the temp if the final output file was created
     (when (and delete-temp-file
