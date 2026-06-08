@@ -25,6 +25,8 @@
                #:3d-matrices
                #:cl-fftw
                #:mpg123-ffi
+               #:lparallel
+               #:uiop
                #+linux #:cl-cairo2-xlib
                )
 

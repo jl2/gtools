@@ -42,9 +42,8 @@
 
 (defun normalize-and-create-directories (path)
   "Utility function to make relative path names relative to the user's home directory to work with Cairo."
-  (let ((rn (uiop:native-namestring path)))
-    (ensure-directories-exist rn)
-    rn))
+  (ensure-directories-exist path)
+  (uiop:native-namestring path))
 
 
 (defun make-movie (image-file-directory
@@ -69,7 +68,7 @@
                      (mp3-file-name nil)
                      (image-fps 12)
                      (final-fps 30)
-                     (bit-rate (* 48 1024 1024))
+                     (bit-rate (* 32 1024 1024))
 
                      (temp-file-name (make-pathname :name "soundless-temp-movie"
                                                :type "mp4"
@@ -108,6 +107,7 @@ When :delete-images is t, files matching <directory>/<image-file-base>*.<image-f
               (format nil "mv \"~a\" \"~a\""
                       (uiop:native-namestring temp-file-name)
                       (uiop:native-namestring output-file-name)))))
+
     (format t "Running: ~a~%" movie-command)
     (uiop:run-program movie-command :output *standard-output* :error *standard-output*)
 
@@ -135,3 +135,12 @@ When :delete-images is t, files matching <directory>/<image-file-base>*.<image-f
                              )))
         (format t "Running: ~a~%" rm-cmd)
         (uiop:run-program rm-cmd :output *standard-output* :error *standard-output*)))))
+
+(defun recursive-find-files (directory &optional pattern)
+  (concatenate 'list
+               (uiop:directory-files directory pattern)
+               (apply #'concatenate 'list
+                      (lparallel:pmap 'list
+                                      (lambda (path)
+                                        (recursive-find-files path pattern))
+                                      (uiop/filesystem:subdirectories directory)))))

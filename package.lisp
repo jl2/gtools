@@ -27,6 +27,8 @@
 
            #:make-movie
 
+           #:recursive-find-files
+
            #:make-mat4
            #:make-quaternion
            #:qrotate
